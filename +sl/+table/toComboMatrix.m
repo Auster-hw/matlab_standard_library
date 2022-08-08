@@ -1,39 +1,192 @@
-function [BC_all_data,VE_all_data] = toComboMatrix(input)
-% input = data;
-norm_rates = [1/6 1/3 1 2 4 8 16];
-BC_all_data= NaN(6,length(norm_rates),length(fieldnames(input)));
-VE_all_data = NaN(6,length(norm_rates),length(fieldnames(input)));
-for i = 1:length(fieldnames(input))
-%     expt = dba.short.loadExpt(expt_ids(i));
-%     tm = expt.trial_meta;
-%     table = expt.trial_meta(:,{'set','fill_rate','bladder_capacity','voiding_efficiency'});
-    
-%     rule out the presets and bad data     
-    true_sets =  input.(sprintf('table%d',i))(input.(sprintf('table%d',i)).set~=0,:);
-    true_sets = true_sets(true_sets.ignore~=1,:);
-   
-    for j = 1:length(unique(true_sets.set)) 
-        if  ~ismember(j,true_sets.set)
-            j = j+1;
-        end
-        single_set= true_sets(true_sets.set==j,:);
-         base_rate = single_set.base_fill_rate;
-        norm_rate_in_set = single_set.fill_rate ./ base_rate;
-        position_indices = dba.files.getPosition(norm_rate_in_set,norm_rates);
-        BC_all_data(j,position_indices,i) = single_set.bladder_capacity;
-        VE_all_data(j,position_indices,i) = single_set.voiding_efficiency;
-        
+function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
+%
+%   Inputs
+%   ------
+%   data : table
+%   target : string
+%       Name of the column to store as the value
+%   dimension_fields : cellstr
+%       Columns that we will run unique on and use for creating dimensions
+%
+%   Optional Inputs
+%   ---------------
+%   merge_function : function_handle
+%   dims : struct
+%   
+%
+%
+%   Output
+%   ------
+%   matrix_result :
+%   s : structure
+%       - fields are names of columns, values are order of indices
+%       s.A = [0.5,1]
+%       s.B = [2,3]
+%
+%   So, if we have:
+%   A   B   C
+%   ---------
+%   0.5 2   3
+%   1   3   5
+%   0.5 3   4
+%   1   2   8
+%   1   2   9
+%
+%   s = struct();
+%   s.A = [0.5,1,0.5,1,1]';
+%   s.B = [2,3,3,2,2]';
+%   s.C = [3 5 4 8 9]'
+%   data = struct2table(s);
+%
+%   output = sl.table.toComboMatrix(data,'C',{'A','B'});
+%
+%   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function','keep_first');
+%   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max);
+%
+%        B  2 3 
+%        B  2 3
+%   A    ---
+%  0.5   3 4
+%   1    8 5 
+%   1    8 5
+%
+%   s = struct;
+%   s.A = [1,0.5];
+%   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max,'dims',s);
+%
+%     B  2 3 
+%     B  2 3
+%   A    ---
+%   1    8 5   %Note we've forced order of A to be 1 then 0.5, not sorted
+%  0.5   3 4
+%
+%   s = struct;
+%   s.A = [1];
+%   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max,'dims',s);
+%   
+%     B  2 3 
+%
+%     B  2 3
+%   A    ---
+%   1    8 5   %Note we've ignored A=0.5
+%
+%
+%   
+%
+%   bc_mat = sl.table.toComboMatrix(data,'bladder_capacity',{'set','fill_rate','expt_id'});
+
+%   see IC from [U,IA,IC] = unique() - use IC to get indices from unique
+%
+%   fieldnames() - name of fields in structure
+%   default value
+
+
+% target = 'bladder_capacity';
+% dimension_fields = {'set','fill_rate','expt_id','base_fill_rate'};
+
+
+% new_data = data(:, [sprintf(target) , dimension_fields]);
+% new_data= new_data(new_data.set~=0,:);
+% s= struct;
+% G = findgroups(new_data.expt_id);
+% output= NaN(6,length(norm_rates),max(G));
+%         for i =1 : max(G)
+%             indices = G==i;
+%            temp = new_data(indices,:);
+% 
+%            for j = 1: length(unique(temp.set))
+%         single_set= temp(temp.set==j,:);
+%          base_rate = unique(single_set.base_fill_rate);
 %         norm_rate_in_set = single_set.fill_rate ./ base_rate;
 %         position_indices = dba.files.getPosition(norm_rate_in_set,norm_rates);
-%         BC_all_data(j,position_indices,i) = single_set.bladder_capacity;
-%         VE_all_data(j,position_indices,i) = single_set.voiding_efficiency;
-%         BC(i,:) = mean(BC_all_data(:,:,i),1,'omitnan');
-%         VE(i,:) = mean(VE_all_data(:,:,i),1,'omitnan');
-%         BC_norm(i,:) = mean(BC_all_data(:,:,i)./ BC_all_data(:,br_position,i),1,'omitnan');
-%         VE_norm(i,:) = mean(VE_all_data(:,:,i),1,'omitnan');
-%         VE_norm(i,:) =  VE_norm(i,:)./VE_norm(i,br_position);
+%        output (j,position_indices,i) = single_set.(sprintf(target));
+%            end
+% 
+%         end
+
+
+norm_rates = [1/6 1/3 1 2 4 8 16];
+target = 'bladder_capacity';
+dimension_fields = {'set','fill_rate','expt_id','base_fill_rate'};
+G= findgroups(data.expt_id);
+s=NaN(max(data.set),length(norm_rates),max(G));
+for i=1:max(G)
+    temp = data(G==i,:);
+    temp = temp(temp.set~=0,:);
+    base_rate = unique(temp.base_fill_rate);
+   
+    for j= 1:max(temp.set)
+        single_set = temp(temp.set ==j,:);
+          fill_rate_in_set = unique(single_set.fill_rate);
+        norm_rate_in_set = fill_rate_in_set./base_rate;
+       
+        
+        position=[];
+        for k= 1: length(norm_rate_in_set)
+            try
+                position(k) = find(norm_rates == norm_rate_in_set(k));
+            catch ME
+                difference = abs(norm_rates-norm_rate_in_set(k));
+                position(k) =  find(difference == min(difference));
+            end
+        end
+        s(j,position,i) =  single_set.(target) ;
     end
-    
 end
+[U,IA,IC] = unique(temp)
+
+
+
+
+
+
+
+in.merge_function = @mean;
+in.default_value = NaN;
+in.dims = struct(); %empty, no fields overridden
+in = sl.in.processVarargin(in,varargin);
+
+if ischar(in.merge_function)
+%    if strcmp(in.merge_function,'keep_first')
+%        in.merge_function = @keep_first;
+%    else
+in.merge_function = str2func(in.merge_function);
+%    end    
 end
 
+keyboard
+
+end
+
+function output = keep_first(array)
+    output = array(1);
+end
+
+
+
+
+
+
+
+% 
+% 
+% in.merge_function = @mean;
+% in.default_value = NaN;
+% in.dims = struct(); %empty, no fields overridden
+% in = sl.in.processVarargin(in,varargin);
+% 
+% if ischar(in.merge_function)
+%     %    if strcmp(in.merge_function,'keep_first')
+%     %        in.merge_function = @keep_first;
+%     %    else
+%     in.merge_function = str2func(in.merge_function);
+%     %    end
+% end
+% 
+% keyboard
+% 
+% end
+% 
+% function output = keep_first(array)
+% output = array(1);
+% end
