@@ -12,7 +12,7 @@ function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
 %   ---------------
 %   merge_function : function_handle
 %   dims : struct
-%   
+%
 %
 %
 %   Output
@@ -43,18 +43,18 @@ function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
 %   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function','keep_first');
 %   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max);
 %
-%        B  2 3 
+%        B  2 3
 %        B  2 3
 %   A    ---
 %  0.5   3 4
-%   1    8 5 
+%   1    8 5
 %   1    8 5
 %
 %   s = struct;
 %   s.A = [1,0.5];
 %   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max,'dims',s);
 %
-%     B  2 3 
+%     B  2 3
 %     B  2 3
 %   A    ---
 %   1    8 5   %Note we've forced order of A to be 1 then 0.5, not sorted
@@ -63,15 +63,15 @@ function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
 %   s = struct;
 %   s.A = [1];
 %   output = sl.table.toComboMatrix(data,'C',{'A','B'},'merge_function',@max,'dims',s);
-%   
-%     B  2 3 
+%
+%     B  2 3
 %
 %     B  2 3
 %   A    ---
 %   1    8 5   %Note we've ignored A=0.5
 %
 %
-%   
+%
 %
 %   bc_mat = sl.table.toComboMatrix(data,'bladder_capacity',{'set','fill_rate','expt_id'});
 
@@ -93,7 +93,7 @@ function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
 %         for i =1 : max(G)
 %             indices = G==i;
 %            temp = new_data(indices,:);
-% 
+%
 %            for j = 1: length(unique(temp.set))
 %         single_set= temp(temp.set==j,:);
 %          base_rate = unique(single_set.base_fill_rate);
@@ -101,7 +101,7 @@ function [output,s] = toComboMatrix(data,target,dimension_fields,varargin)
 %         position_indices = dba.files.getPosition(norm_rate_in_set,norm_rates);
 %        output (j,position_indices,i) = single_set.(sprintf(target));
 %            end
-% 
+%
 %         end
 
 
@@ -114,29 +114,28 @@ for i=1:max(G)
     temp = data(G==i,:);
     temp = temp(temp.set~=0,:);
     base_rate = unique(temp.base_fill_rate);
-   
-    for j= 1:max(temp.set)
-        single_set = temp(temp.set ==j,:);
-          fill_rate_in_set = unique(single_set.fill_rate);
-        norm_rate_in_set = fill_rate_in_set./base_rate;
-       
-        
-        position=[];
-        for k= 1: length(norm_rate_in_set)
-            try
-                position(k) = find(norm_rates == norm_rate_in_set(k));
-            catch ME
-                difference = abs(norm_rates-norm_rate_in_set(k));
-                position(k) =  find(difference == min(difference));
-            end
+    %     for j= 1:max(temp.set)
+    %         single_set = temp(temp.set ==j,:);
+    %           fill_rate_in_set = unique(single_set.fill_rate);
+    %         norm_rate_in_set = fill_rate_in_set./base_rate;
+    %         temp = data(data.set~=0,:);
+    temp.position=temp.fill_rate./base_rate;
+    for k= 1: length(temp.fill_rate)
+        try
+            temp.position(k) = find(norm_rates == temp.position(k));
+        catch ME
+            difference = abs(norm_rates-temp.position(k));
+            temp.position(k) =  find(difference == min(difference));
         end
-        s(j,position,i) =  single_set.(target) ;
     end
+    
 end
 [U,IA,IC] = unique(temp)
+s=struct;
+s.bladder_capacity =accumarray([temp.set temp.position],temp.bladder_capacity,[],@(x) {x});
 
 
-
+output = cell2mat(s.bladder_capacity(:,2))./cell2mat(s.bladder_capacity(:,3));
 
 
 
@@ -147,11 +146,11 @@ in.dims = struct(); %empty, no fields overridden
 in = sl.in.processVarargin(in,varargin);
 
 if ischar(in.merge_function)
-%    if strcmp(in.merge_function,'keep_first')
-%        in.merge_function = @keep_first;
-%    else
-in.merge_function = str2func(in.merge_function);
-%    end    
+    %    if strcmp(in.merge_function,'keep_first')
+    %        in.merge_function = @keep_first;
+    %    else
+    in.merge_function = str2func(in.merge_function);
+    %    end
 end
 
 keyboard
@@ -159,7 +158,7 @@ keyboard
 end
 
 function output = keep_first(array)
-    output = array(1);
+output = array(1);
 end
 
 
@@ -168,13 +167,13 @@ end
 
 
 
-% 
-% 
+%
+%
 % in.merge_function = @mean;
 % in.default_value = NaN;
 % in.dims = struct(); %empty, no fields overridden
 % in = sl.in.processVarargin(in,varargin);
-% 
+%
 % if ischar(in.merge_function)
 %     %    if strcmp(in.merge_function,'keep_first')
 %     %        in.merge_function = @keep_first;
@@ -182,11 +181,11 @@ end
 %     in.merge_function = str2func(in.merge_function);
 %     %    end
 % end
-% 
+%
 % keyboard
-% 
+%
 % end
-% 
+%
 % function output = keep_first(array)
 % output = array(1);
 % end
